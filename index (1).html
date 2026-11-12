@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1629" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ece6f0" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Lights out</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌙</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Spectral:ital,wght@0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ece6f0;
+    --surface: #ddd3e6;
+    --ink: #2a2140;
+    --muted: #645879;
+    --accent: #a35a12;
+    --on-accent: #fff8ee;
+    --zone: #8a78a8;
+    --serif: "Spectral", Georgia, "Times New Roman", serif;
+    --sans: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #1c1629;
+      --surface: #2a2140;
+      --ink: #e7dcc8;
+      --muted: #a092b8;
+      --accent: #e3a04a;
+      --on-accent: #1c1629;
+      --zone: #6c5c8c;
+    }
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 1.0625rem/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 34rem; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+  .now { min-height: 4.5rem; }
+  .now h1 {
+    font: 500 1.6rem/1.2 var(--serif);
+    margin: 0 0 .25rem;
+    text-wrap: balance;
+  }
+  .now p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+  /* The dial: the episode laid out end to end, skipped parts hatched */
+  .dial {
+    position: relative;
+    height: 3.25rem;
+    margin: 1.5rem 0 .4rem;
+    border-radius: .75rem;
+    background: var(--surface);
+    overflow: hidden;
+    touch-action: none;
+  }
+  .played { position: absolute; inset: 0 auto 0 0; width: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .zone {
+    position: absolute; top: 0; bottom: 0;
+    background: repeating-linear-gradient(135deg, var(--zone) 0 2px, transparent 2px 7px);
+    border-inline: 1px solid var(--zone);
+  }
+  .zone span {
+    position: absolute; bottom: .3rem; left: .35rem;
+    font-size: .7rem; color: var(--ink);
+    background: var(--surface); padding: 0 .3rem; border-radius: .25rem;
+    white-space: nowrap;
+  }
+  .zone.off { opacity: .35; }
+  .head { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: var(--accent); }
+  .times { display: flex; justify-content: space-between; font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; align-items: center; justify-content: center; gap: 1.75rem; margin: 1.25rem 0 .5rem; }
+  .jump { background: none; border: 0; width: 3.5rem; height: 3.5rem; border-radius: 50%; color: var(--muted); font-size: .95rem; }
+  .play {
+    width: 4.75rem; height: 4.75rem; border-radius: 50%; border: 0;
+    background: var(--accent); color: var(--on-accent);
+    display: grid; place-items: center;
+  }
+  .play svg { width: 1.9rem; height: 1.9rem; fill: currentColor; }
+  .play:disabled { opacity: .4; cursor: default; }
+
+  .status { min-height: 1.5rem; text-align: center; color: var(--muted); font-size: .9rem; margin: 0; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1.5rem; }
+  .row h2 { font: 700 .95rem/1.3 var(--sans); margin: 0; }
+  .sleep { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .6rem; }
+  .sleep button, .toggle {
+    border: 1px solid var(--zone); background: none; border-radius: 999px;
+    padding: .45rem .9rem; min-height: 2.75rem; font-size: .95rem;
+  }
+  .sleep button[aria-pressed="true"], .toggle[aria-pressed="true"] {
+    background: var(--ink); color: var(--bg); border-color: var(--ink);
+  }
+  .sleep-left { color: var(--muted); font-size: .9rem; margin: .5rem 0 0; min-height: 1.35rem; }
+
+  .list { margin-top: 2.25rem; }
+  .list h2 { font: 400 italic 1.25rem/1.3 var(--serif); margin: 0 0 .5rem; }
+  .ep {
+    display: block; width: 100%; text-align: left;
+    background: none; border: 0; border-top: 1px solid var(--surface);
+    padding: .85rem 0;
+  }
+  .ep strong { display: block; font: 500 1.05rem/1.3 var(--serif); }
+  .ep small { color: var(--muted); font-size: .85rem; }
+  .ep[aria-current="true"] strong { color: var(--accent); }
+  .empty { color: var(--muted); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .status { transition: opacity .4s; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="now" aria-live="polite">
+    <h1 id="title">Pick an episode</h1>
+    <p id="sub">Intros, weather and outros are skipped for you.</p>
+  </section>
+
+  <div class="dial" id="dial" role="slider" tabindex="0" aria-label="Position in episode" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+    <div class="played" id="played"></div>
+    <div id="zones"></div>
+    <div class="head" id="head"></div>
+  </div>
+  <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+
+  <div class="controls">
+    <button class="jump" id="back" aria-label="Back 15 seconds">−15</button>
+    <button class="play" id="play" aria-label="Play" disabled>
+      <svg id="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button class="jump" id="fwd" aria-label="Forward 30 seconds">+30</button>
+  </div>
+  <p class="status" id="status"></p>
+
+  <div class="row">
+    <h2>Skip intros, weather and outros</h2>
+    <button class="toggle" id="skipToggle" aria-pressed="true">On</button>
+  </div>
+
+  <div class="row"><h2>Sleep timer</h2></div>
+  <div class="sleep" id="sleep" role="group" aria-label="Sleep timer">
+    <button data-min="0" aria-pressed="true">Off</button>
+    <button data-min="15" aria-pressed="false">15 min</button>
+    <button data-min="30" aria-pressed="false">30 min</button>
+    <button data-min="45" aria-pressed="false">45 min</button>
+    <button data-min="60" aria-pressed="false">60 min</button>
+  </div>
+  <p class="sleep-left" id="sleepLeft"></p>
+
+  <section class="list">
+    <h2>Episodes</h2>
+    <div id="episodes"><p class="empty">Loading episodes…</p></div>
+  </section>
+
+  <audio id="audio" preload="metadata"></audio>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const audio = $("audio");
+  const NAMES = { intro: "intro", weather: "weather", outro: "outro", ad: "ad break" };
+  const FADE_MS = 60000;
+
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+      catch { return fallback; }
+    },
+    set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} }
+  };
+
+  let episodes = [];
+  let current = null;
+  let skips = [];
+  let skipOn = store.get("skipOn", true);
+  let suppressed = new Set();   // zones the listener deliberately sought into
+  let ourSeek = false;
+  let sleepEnd = null;
+  let lastSaved = 0;
+  let statusTimer = null;
+
+  const fmt = (s) => {
+    if (!isFinite(s)) return "0:00";
+    s = Math.max(0, Math.floor(s));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+  };
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+
+  function say(text, ms = 4000) {
+    $("status").textContent = text;
+    clearTimeout(statusTimer);
+    if (ms) statusTimer = setTimeout(() => { $("status").textContent = ""; }, ms);
+  }
+
+  // ---------- Episodes ----------
+  async function loadEpisodes() {
+    try {
+      const res = await fetch("data/episodes.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(res.status);
+      episodes = (await res.json()).episodes || [];
+    } catch {
+      $("episodes").innerHTML = '<p class="empty">Couldn’t load the episode list. Check that data/episodes.json is in the repo, then reload.</p>';
+      return;
+    }
+    renderList();
+    const last = episodes.find((e) => e.id === store.get("last", null));
+    if (last) open(last, false);
+  }
+
+  function renderList() {
+    const box = $("episodes");
+    box.textContent = "";
+    if (!episodes.length) {
+      box.innerHTML = '<p class="empty">No episodes yet. Run the “Find skips in new episodes” workflow on GitHub to fetch them.</p>';
+      return;
+    }
+    for (const ep of episodes) {
+      const b = document.createElement("button");
+      b.className = "ep";
+      if (current && current.id === ep.id) b.setAttribute("aria-current", "true");
+      const t = document.createElement("strong");
+      t.textContent = ep.title;
+      const m = document.createElement("small");
+      const ready = ep.status === "ready";
+      const n = ready ? ep.skips.length : 0;
+      m.textContent = [
+        fmtDate(ep.published),
+        ep.duration ? fmt(ep.duration) : "",
+        ready ? (n ? `${n} skip${n > 1 ? "s" : ""} found` : "Nothing to skip") : "Plays without skips (not processed yet)"
+      ].filter(Boolean).join(", ");
+      b.append(t, m);
+      b.addEventListener("click", () => open(ep, true));
+      box.append(b);
+    }
+  }
+
+  function open(ep, autoplay) {
+    current = ep;
+    store.set("last", ep.id);
+    suppressed = new Set();
+    skips = [];
+    $("title").textContent = ep.title;
+    $("sub").textContent = ep.status === "ready" ? "Intros, weather and outros are skipped for you." : "This one hasn’t been processed yet, so it plays without skips.";
+    $("play").disabled = false;
+    audio.src = ep.url;
+    audio.load();
+    renderZones();
+    renderList();
+    audio.addEventListener("loadedmetadata", () => {
+      if (current !== ep) return;
+      computeSkips();
+      const pos = store.get("pos:" + ep.id, 0);
+      if (pos > 10 && pos < audio.duration - 60) { ourSeek = true; audio.currentTime = pos; }
+      if (autoplay) play();
+    }, { once: true });
+    setMediaSession();
+  }
+
+  // Ads in your copy can differ in length from the copy the Action analysed.
+  // If they do, assume the extra audio sits at the start and shift every skip.
+  function computeSkips() {
+    const base = (current && current.status === "ready" && current.skips) || [];
+    const d = audio.duration;
+    const delta = current.duration && isFinite(d) ? d - current.duration : 0;
+    const shift = Math.abs(delta) > 2 ? delta : 0;
+    skips = base.map((s) => ({
+      label: s.label,
+      start: s.label === "intro" ? 0 : Math.max(0, s.start + shift),
+      end: Math.min(d, s.end + shift)
+    })).filter((s) => s.end - s.start > 2);
+    if (shift) say(`Skip times shifted ${shift > 0 ? "+" : "−"}${Math.round(Math.abs(shift))} s to match this copy’s ads`, 6000);
+    renderZones();
+  }
+
+  // ---------- Dial ----------
+  function renderZones() {
+    const box = $("zones");
+    box.textContent = "";
+    const d = audio.duration;
+    if (!isFinite(d) || !d) return;
+    for (const s of skips) {
+      const z = document.createElement("div");
+      z.className = "zone" + (skipOn ? "" : " off");
+      z.style.left = (s.start / d) * 100 + "%";
+      z.style.width = ((s.end - s.start) / d) * 100 + "%";
+      if ((s.end - s.start) / d > 0.06) {
+        const l = document.createElement("span");
+        l.textContent = NAMES[s.label] || s.label;
+        z.append(l);
+      }
+      box.append(z);
+    }
+    $("dial").setAttribute("aria-valuemax", Math.round(d));
+  }
+
+  function drawHead() {
+    const d = audio.duration, t = audio.currentTime;
+    const pct = isFinite(d) && d ? (t / d) * 100 : 0;
+    $("head").style.left = pct + "%";
+    $("played").style.width = pct + "%";
+    $("cur").textContent = fmt(t);
+    $("dur").textContent = fmt(d);
+    $("dial").setAttribute("aria-valuenow", Math.round(t));
+    $("dial").setAttribute("aria-valuetext", `${fmt(t)} of ${fmt(d)}`);
+  }
+
+  function seekFromPointer(e) {
+    const r = $("dial").getBoundingClientRect();
+    const d = audio.duration;
+    if (!isFinite(d)) return;
+    audio.currentTime = Math.min(d, Math.max(0, ((e.clientX - r.left) / r.width) * d));
+  }
+  $("dial").addEventListener("pointerdown", (e) => {
+    $("dial").setPointerCapture(e.pointerId);
+    seekFromPointer(e);
+  });
+  $("dial").addEventListener("pointermove", (e) => { if (e.buttons) seekFromPointer(e); });
+  $("dial").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") { audio.currentTime += 15; e.preventDefault(); }
+    if (e.key === "ArrowLeft") { audio.currentTime -= 15; e.preventDefault(); }
+  });
+
+  // ---------- Playback ----------
+  function play() {
+    audio.play().catch(() => say("Tap play to start.", 0));
+  }
+  function updateIcon() {
+    const playing = !audio.paused;
+    $("icon").innerHTML = playing ? '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+    $("play").setAttribute("aria-label", playing ? "Pause" : "Play");
+    if ("mediaSession" in navigator) navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+  }
+  $("play").addEventListener("click", () => (audio.paused ? play() : audio.pause()));
+  $("back").addEventListener("click", () => { audio.currentTime = Math.max(0, audio.currentTime - 15); });
+  $("fwd").addEventListener("click", () => { audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30); });
+  audio.addEventListener("play", updateIcon);
+  audio.addEventListener("pause", updateIcon);
+  audio.addEventListener("ended", () => { updateIcon(); store.set("pos:" + current.id, 0); });
+  audio.addEventListener("error", () => say("This episode didn’t load. Check your connection and try again.", 0));
+
+  function checkSkips() {
+    if (!skipOn || audio.seeking || audio.paused) return;
+    const t = audio.currentTime;
+    for (let i = 0; i < skips.length; i++) {
+      const s = skips[i];
+      if (suppressed.has(i)) continue;
+      if (t >= s.start && t < s.end - 0.75) {
+        ourSeek = true;
+        audio.currentTime = s.end;
+        say(`Skipped the ${NAMES[s.label] || s.label}`);
+        return;
+      }
+    }
+  }
+
+  // If you seek into a skipped part yourself, it plays instead of skipping.
+  audio.addEventListener("seeked", () => {
+    if (ourSeek) { ourSeek = false; return; }
+    const t = audio.currentTime;
+    suppressed = new Set();
+    skips.forEach((s, i) => { if (t >= s.start && t < s.end) suppressed.add(i); });
+  });
+
+  audio.addEventListener("timeupdate", () => {
+    checkSkips();
+    drawHead();
+    checkSleep();
+    if (current && Date.now() - lastSaved > 5000) {
+      lastSaved = Date.now();
+      store.set("pos:" + current.id, audio.currentTime);
+    }
+  });
+
+  $("skipToggle").addEventListener("click", () => {
+    skipOn = !skipOn;
+    store.set("skipOn", skipOn);
+    renderSkipToggle();
+    renderZones();
+  });
+  function renderSkipToggle() {
+    $("skipToggle").setAttribute("aria-pressed", String(skipOn));
+    $("skipToggle").textContent = skipOn ? "On" : "Off";
+  }
+
+  // ---------- Sleep timer ----------
+  $("sleep").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const min = Number(b.dataset.min);
+    sleepEnd = min ? Date.now() + min * 60000 : null;
+    audio.volume = 1;
+    for (const x of $("sleep").children) x.setAttribute("aria-pressed", String(x === b));
+    checkSleep();
+  });
+
+  function checkSleep() {
+    if (!sleepEnd) { $("sleepLeft").textContent = ""; return; }
+    const left = sleepEnd - Date.now();
+    if (left <= 0) {
+      audio.pause();
+      audio.volume = 1;
+      sleepEnd = null;
+      for (const x of $("sleep").children) x.setAttribute("aria-pressed", String(x.dataset.min === "0"));
+      $("sleepLeft").textContent = "Stopped. Good night.";
+      return;
+    }
+    // Fades out over the last minute. iPhones ignore volume changes from web pages,
+    // so there it simply stops at the end.
+    audio.volume = left < FADE_MS ? Math.max(0.05, left / FADE_MS) : 1;
+    $("sleepLeft").textContent = left < FADE_MS ? "Fading out…" : `Stops in ${Math.ceil(left / 60000)} min`;
+  }
+  setInterval(checkSleep, 1000);
+
+  // ---------- Lock screen ----------
+  function setMediaSession() {
+    if (!("mediaSession" in navigator) || !current) return;
+    navigator.mediaSession.metadata = new MediaMetadata({ title: current.title, artist: "Welcome to Night Vale" });
+    const h = {
+      play: () => play(),
+      pause: () => audio.pause(),
+      seekbackward: () => { audio.currentTime = Math.max(0, audio.currentTime - 15); },
+      seekforward: () => { audio.currentTime += 30; }
+    };
+    for (const [k, fn] of Object.entries(h)) {
+      try { navigator.mediaSession.setActionHandler(k, fn); } catch {}
+    }
+  }
+
+  renderSkipToggle();
+  loadEpisodes();
+})();
+</script>
+</body>
+</html>
